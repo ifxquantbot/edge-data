@@ -23,9 +23,17 @@ jobs:
         run: python fetch_prices.py
 
       - name: Commit and push
+        if: always()
         run: |
           git config user.name "edge-data-bot"
           git config user.email "actions@users.noreply.github.com"
           git add data/
-          git diff --cached --quiet || git commit -m "Daily price update"
+          git diff --cached --quiet || git commit -m "Daily price update $(date -u +%F)"
           git push
+
+      - name: Fail the job if any symbol failed
+        run: |
+          if grep -q PARTIAL data/last_run.txt; then
+            echo "::error::$(sed -n 2p data/last_run.txt)"
+            exit 1
+          fi
