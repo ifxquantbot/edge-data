@@ -1,8 +1,9 @@
 """Edge Engine data mirror — fetches daily closes from Yahoo Finance and writes
 CSVs to data/. Runs inside GitHub Actions (which has unrestricted egress).
 
-Symbols: ^GSPC (SPX), ^NDX, GC=F (gold front-month), ^VIX.
-Output: data/spx.csv, data/ndx.csv, data/gold.csv, data/vix.csv
+Symbols: ^GSPC (SPX), ^NDX, GC=F (gold front-month), ^VIX, TLT, ^TNX,
+DX-Y.NYB, CL=F, BTC-USD, EURUSD=X.
+Output: data/<key>.csv for each key in SYMBOLS.
 Format: date,close (one row per trading day, 2023-01-01 onward, full overwrite
 each run so revisions/corrections self-heal).
 """
@@ -13,7 +14,20 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-SYMBOLS = {"spx": "^GSPC", "ndx": "^NDX", "gold": "GC=F", "vix": "^VIX"}
+SYMBOLS = {
+    # existing four — do not reorder or rename, downstream code reads these paths
+    "spx":  "^GSPC",      # S&P 500 index
+    "ndx":  "^NDX",       # Nasdaq 100 index
+    "gold": "GC=F",       # gold front-month future
+    "vix":  "^VIX",       # CBOE volatility index
+    # added 2026-08-17 for the low-correlation sleeve search
+    "tlt":  "TLT",        # 20y+ Treasury ETF — tradeable bond proxy
+    "ust":  "^TNX",       # US 10y yield index — the macro variable itself
+    "dxy":  "DX-Y.NYB",   # US dollar index
+    "oil":  "CL=F",       # WTI crude front-month
+    "btc":  "BTC-USD",    # crypto (note: trades 7 days/week)
+    "eur":  "EURUSD=X",   # EUR/USD spot
+}
 START = int(datetime(2023, 1, 1, tzinfo=timezone.utc).timestamp())
 OUT = Path("data")
 OUT.mkdir(exist_ok=True)
@@ -56,8 +70,11 @@ def main():
     (OUT / "last_run.txt").write_text(
         datetime.now(timezone.utc).isoformat() + "\n"
         + ("OK" if not failures else "PARTIAL: " + "; ".join(failures)) + "\n")
+    # Do NOT fail here — the workflow must still commit whatever succeeded.
+    # The job is failed at the end (see fetch.yml) by reading last_run.txt,
+    # so a single bad symbol can no longer discard a whole night's data.
     if failures:
-        raise SystemExit(1)
+        print(f"PARTIAL: {len(failures)} of {len(SYMBOLS)} symbols failed")
 
 
 if __name__ == "__main__":
